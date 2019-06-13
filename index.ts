@@ -1,12 +1,14 @@
-const dialogflow = require("dialogflow");
-const uuid = require("uuid");
+import * as dialogflow from "dialogflow";
+import * as uuid from "uuid";
 
 const matchers = require("./src/matchers");
 const structjson = require("./src/structjson");
 
 expect.extend(matchers);
 
-function generateSession(projectId) {
+function generateSession(
+  projectId: string
+): [dialogflow.SessionsClient, string] {
   const sessionId = uuid.v4();
 
   const sessionClient = new dialogflow.SessionsClient();
@@ -16,12 +18,12 @@ function generateSession(projectId) {
 }
 
 async function request(
-  text,
-  source,
-  languageCode,
-  [sessionClient, sessionPath]
-) {
-  const request = {
+  text: string,
+  source: dialogflow.Platform,
+  languageCode: string,
+  [sessionClient, sessionPath]: [dialogflow.SessionsClient, string]
+): Promise<dialogflow.QueryResult> {
+  const request: dialogflow.DetectIntentRequest = {
     session: sessionPath,
     queryInput: {
       text: {
@@ -41,11 +43,20 @@ async function request(
   return responses[0].queryResult;
 }
 
-function createBot(projectId, source = "DEFAULT", languageCode = "en") {
+interface Bot {
+  request: (text: string) => Promise<dialogflow.QueryResult>;
+  newSession: () => Bot;
+}
+
+function createBot(
+  projectId: string,
+  source: dialogflow.Platform,
+  languageCode: string = "en"
+): Bot {
   const session = generateSession(projectId);
 
   return {
-    request: async function(text) {
+    request: async function(text: string) {
       const response = await request(text, source, languageCode, session);
       return response;
     },
@@ -55,4 +66,4 @@ function createBot(projectId, source = "DEFAULT", languageCode = "en") {
   };
 }
 
-module.exports = createBot;
+export = createBot;

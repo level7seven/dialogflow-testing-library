@@ -1,12 +1,62 @@
+import * as dialogflow from "dialogflow";
+import * as colors from "colors";
+
+const equals = (obj1: any, obj2: any): Boolean =>
+  Object.keys(obj1).length === Object.keys(obj2).length &&
+  Object.keys(obj1).every(key => obj1[key] === obj2[key]);
+
 const { printReceived, printExpected } = require("jest-matcher-utils");
 const diff = require("jest-diff");
-const colors = require("colors");
-
 const structjson = require("./structjson");
-const { selectFulfillmentMessages, selectExampleMessage } = require("./utils");
 
+export function selectFulfillmentMessages(
+  result: dialogflow.QueryResult,
+  type: string,
+  source?: dialogflow.Platform
+): dialogflow.Message[] {
+  const fulfillmentMessages = result.fulfillmentMessages.filter(
+    ({ message, platform }) => message === type && platform === source
+  );
+
+  return fulfillmentMessages;
+}
+
+export function selectExampleMessage(
+  messages: dialogflow.TextMessage[],
+  correspondingMessage: dialogflow.TextMessage | undefined
+): string | false | undefined {
+  if (messages.length === 0) {
+    return;
+  }
+
+  return !correspondingMessage && messages[0].text.text[0];
+}
+
+declare global {
+  namespace jest {
+    interface Matchers<R> {
+      toHaveIntent(intent: string): R;
+      toHaveContext(content: dialogflow.Context): R;
+      toHaveTextResult(text: string): R;
+      toHaveOneOfTextResults(textArray: string[]): R;
+      toHaveQuickReplies(quickReplies: string[]): R;
+      toHaveCard(expectedCard: dialogflow.Card): R;
+    }
+  }
+}
+
+/**
+ * As there are currently no ways to retrieve the platform from the query result
+ * we consider a response from Actions On Google if one of the fulfillment messages
+ * has a platform whose value is ACTIONS_ON_GOOGLE
+ */
+export function isActionsOnGoogle(result: dialogflow.QueryResult): Boolean {
+  return result.fulfillmentMessages.some(
+    message => message.platform === "ACTIONS_ON_GOOGLE"
+  );
+}
 const matchers = {
-  toHaveIntent(result, intent) {
+  toHaveIntent(result: dialogflow.QueryResult, intent: string) {
     const query = result.queryText;
     const matchedIntent = result.intent.displayName;
 
@@ -22,8 +72,11 @@ const matchers = {
         }. Make sure they are not ${"conflicting".bold} across your intents.`
     };
   },
-  toHaveContext(result, expectedContext) {
-    if (!expectedContext || this.equals(expectedContext, {})) {
+  toHaveContext(
+    result: dialogflow.QueryResult,
+    expectedContext: dialogflow.Context
+  ) {
+    if (!expectedContext || equals(expectedContext, {})) {
       return {
         pass: false,
         message: () =>
@@ -55,7 +108,7 @@ const matchers = {
     };
 
     return {
-      pass: this.equals(formattedReceivedContext, expectedContext),
+      pass: Object.is(formattedReceivedContext, expectedContext),
       message: () =>
         `The expected context is not the same as the received one.\n\nDifference:\n${diff(
           formattedReceivedContext,
@@ -63,8 +116,11 @@ const matchers = {
         )}`
     };
   },
-  toHaveText(result, expectedText) {
-    const textMessages = selectFulfillmentMessages(result, "text");
+  toHaveText(result: dialogflow.QueryResult, expectedText: string) {
+    const textMessages = selectFulfillmentMessages(
+      result,
+      "text"
+    ) as dialogflow.TextMessage[];
 
     const correspondingMessage = textMessages.find(
       ({ text: { text } }) => text[0] === expectedText
@@ -94,8 +150,14 @@ const matchers = {
       pass: true
     };
   },
-  toHaveOneOfTexts(result, expectedTextArray) {
-    const textMessages = selectFulfillmentMessages(result, "text");
+  toHaveOneOfTexts(
+    result: dialogflow.QueryResult,
+    expectedTextArray: String[]
+  ) {
+    const textMessages = selectFulfillmentMessages(
+      result,
+      "text"
+    ) as dialogflow.TextMessage[];
 
     const correspondingMessage = textMessages.find(
       ({
@@ -107,12 +169,11 @@ const matchers = {
       }
     );
 
-    const exampleMessage = selectExampleMessage(
-      textMessages,
-      correspondingMessage
-    );
-
     if (!correspondingMessage) {
+      const exampleMessage = selectExampleMessage(
+        textMessages,
+        correspondingMessage
+      );
       return {
         pass: false,
         message: () =>
@@ -131,8 +192,14 @@ const matchers = {
       pass: true
     };
   },
-  toHaveQuickReplies(result, expectedQuickReplies) {
-    const quickRepliesArray = selectFulfillmentMessages(result, "quickReplies");
+  toHaveQuickReplies(
+    result: dialogflow.QueryResult,
+    expectedQuickReplies: String[]
+  ) {
+    const quickRepliesArray = selectFulfillmentMessages(
+      result,
+      "quickReplies"
+    ) as dialogflow.QuickRepliesMessage[];
 
     if (quickRepliesArray.length === 0) {
       return {
@@ -144,7 +211,7 @@ const matchers = {
     const quickReplies = quickRepliesArray[0].quickReplies.quickReplies;
 
     return {
-      pass: this.equals(quickReplies, expectedQuickReplies),
+      pass: Object.is(quickReplies, expectedQuickReplies),
       message: () =>
         `The expected quick replies are different from the received ones:\n\n${diff(
           quickReplies,
@@ -154,8 +221,14 @@ const matchers = {
         )}`
     };
   },
-  toHaveCard(result, expectedCard) {
-    const cardArray = selectFulfillmentMessages(result, "card");
+  toHaveCard(
+    result: dialogflow.QueryResult,
+    expectedCard: dialogflow.CardMessage
+  ) {
+    const cardArray = selectFulfillmentMessages(
+      result,
+      "card"
+    ) as dialogflow.CardMessage[];
 
     if (cardArray.length === 0) {
       return {
@@ -167,7 +240,7 @@ const matchers = {
     const card = cardArray[0].card;
 
     return {
-      pass: this.equals(card, expectedCard),
+      pass: Object.is(card, expectedCard),
       message: () =>
         `The expected card is different from the received one:\n\n${diff(
           card,
@@ -177,4 +250,4 @@ const matchers = {
   }
 };
 
-module.exports = matchers;
+export default matchers;

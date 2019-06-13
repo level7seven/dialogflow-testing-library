@@ -1,2 +1,2 @@
 const matchers = require("./src/matchers");
-expect.extend(matchers);
+expect.extend(matchers.default);
